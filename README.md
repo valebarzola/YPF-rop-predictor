@@ -4,8 +4,8 @@ Predicción de **ROP (Rate of Penetration / velocidad de penetración)** en pozo
 
 ## Integrantes
 
-- Juan Manuel Sosa
 - Daiana Soledad Ruggeri
+- Juan Manuel Sosa
 - Juan Bensadon
 - Valentin Barzola
 
