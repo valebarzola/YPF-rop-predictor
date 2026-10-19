@@ -110,7 +110,7 @@ Notebook de **modelado supervisado, validación cruzada por pozo (LOWO) y evalua
 5. **Experimento 4 — Evaluación final en Holdout (Pozo 5) y comparación Balanceado vs. Completo**:
    - En el Pozo 5 (nunca visto en el entrenamiento), **XGBoost obtiene el mejor desempeño tanto en el dataset balanceado ($R^2 = -0.1039$, $\text{RMSE} = 16.00\text{ m/h}$, $\text{MAE} = 13.82\text{ m/h}$) como en el completo ($R^2 = -0.2061$, $\text{RMSE} = 16.73\text{ m/h}$)**.
    - El **dataset balanceado supera al completo en XGBoost**, confirmando que equilibrar la frecuencia de muestreo a 1 fila por metro evita que los pozos 3 y 4 sobredimensionen el entrenamiento.
-   - Se incluyen gráficos de **Predicho vs. Real**, **Feature Importance** (Random Forest y XGBoost) y el **Perfil de ROP vs. Profundidad medida** a lo largo de todo el Pozo 5.
+   - Se incluyen gráficos de **Predicho vs. Real**, **Distribución de errores (residuos) de XGBoost** ($\text{ROP}_{\text{real}} - \text{ROP}_{\text{pred}}$, con error medio de $+5.2\text{ m/h}$), **Feature Importance** (Random Forest y XGBoost) y el **Perfil de ROP vs. Profundidad medida** a lo largo de todo el Pozo 5.
 
 #### Conclusiones principales del modelado
 
