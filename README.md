@@ -83,39 +83,45 @@ Notebook de **estandarización, limpieza unificada sin relleno artificial y arma
 
 ### Etapa 3 — `ROP_Noruega_Modelado.ipynb`
 
-Notebook de **modelado supervisado, validación cruzada por pozo (LOWO) y evaluación en el pozo holdout (Pozo 5)**.
+Notebook de **modelado supervisado, validación intra-pozo por bloques de 100 m, validación cruzada por pozo (LOWO) y evaluación en el pozo holdout (Pozo 5)**.
 
 #### Modelos evaluados
 | # | Modelo | Tipo |
 |---|---|---|
-| 1 | **Linear Regression** | Baseline lineal |
+| 0 | **Baseline (Media / `DummyRegressor`)** | Piso de referencia (predice siempre la media del entrenamiento) |
+| 1 | **Linear Regression** | Modelo lineal estándar |
 | 2 | **Ridge Regression** | Lineal regularizado ($L_2$) |
 | 3 | **Random Forest** | Ensamble de árboles (*bagging*), captura relaciones no lineales |
-| 4 | **XGBoost** | *Gradient boosting* de árboles, mejor rendimiento en datos tabulares |
+| 4 | **XGBoost** | *Gradient boosting* de árboles |
 | 5 | **MLP (`MLPRegressor`)** | Red neuronal perceptrón multicapa `(128, 64, 32)` con *early stopping* |
 
 #### Flujo experimental y resultados clave
 
-1. **Preprocesamiento**:
-   - Eliminación de `Hole Depth (TVD) m` por alta multicolinealidad con `Measured Depth m` ($\text{VIF} > 50$).
-   - Escalado con `RobustScaler` integrado dentro de un `Pipeline` de Scikit-Learn para mitigar el efecto de outliers operativos sin filtrar información entre train y validación.
-2. **Experimento 1 — Split aleatorio 80/20 (interpolación intra-pozo)**:
-   - Mezclando filas de todos los pozos, **XGBoost alcanza $R^2 = 0.8888$ ($\text{RMSE} = 4.93\text{ m/h}$)** y **Random Forest $R^2 = 0.8586$**, mientras que los modelos lineales se estancan en $R^2 \approx 0.40$.
-   - Confirma que la relación física entre parámetros operativos (WOB, RPM, torque, presión, caudal) y ROP es fuertemente **no lineal** y estadísticamente aprendible dentro de formaciones conocidas.
+1. **Preprocesamiento y selección de variables**:
+   - Exclusión de `pozo` de las variables predictoras (`X`) tanto en validación como en el holdout final (solo se utiliza como identificador de grupo para particionar).
+   - Eliminación de `Hole Depth (TVD) m` por redundancia con `Measured Depth m` ($\text{VIF} > 50$).
+   - Evaluación con y sin `Measured Depth m` para corregir el fenómeno de *depth confounding* (los únicos pozos profundos de entrenamiento son los pozos lentos 3 y 4).
+   - Escalado con `RobustScaler` integrado dentro de un `Pipeline` de Scikit-Learn.
+2. **Experimento 1 — Evaluación intra-pozo: Split aleatorio 80/20 vs. Bloques de 100 m de profundidad**:
+   - En el split aleatorio 80/20 de filas sueltas, **XGBoost alcanza $R^2 = 0.8871$ ($\text{MAE} = 3.00\text{ m/h}$)** y **Random Forest $R^2 = 0.8586$ ($\text{MAE} = 3.14\text{ m/h}$)** frente a $R^2 \approx 0.40$ de los lineales.
+   - Al separar por **bloques contiguos de 100 m de profundidad (`GroupKFold`)**, el $R^2$ baja a **$0.5758$ en XGBoost ($\text{MAE} = 5.85\text{ m/h}$)** y a **$0.5381$ en Random Forest ($\text{MAE} = 6.16\text{ m/h}$)**, demostrando que mezclar filas sueltas consecutivas infla el resultado por autocorrelación espacial.
 3. **Experimento 2 — Validación cruzada *Leave-One-Well-Out* (LOWO CV)**:
-   - Entrenando con 5 pozos y evaluando en el pozo restante no visto, todos los modelos pasan a obtener $R^2$ promedio negativo (**XGBoost $R^2 = -0.41$** en balanceado y **$-0.52$** en completo).
-   - El desglose por fold muestra que el error proviene de la **heterogeneidad geológica entre pozos**: el ROP medio varía un 151% entre pozos lentos (Pozo 4: $20.7\text{ m/h}$, Pozo 3: $22.2\text{ m/h}$) y pozos rápidos (Pozo 6: $51.9\text{ m/h}$).
-4. **Experimento 3 — LOWO CV con normalización Z-score por pozo**:
-   - Al estandarizar el ROP por pozo ($\mu = 0, \sigma = 1$) para remover el efecto de escala del ROP base de cada formación, el $R^2$ medio de XGBoost mejora de $-0.41$ a **$-0.19$** ($\text{RMSE} = 13.89\text{ m/h}$), demostrando que parte del error cross-well es un desplazamiento de escala, pero que también cambian las relaciones operativas entre formaciones.
-5. **Experimento 4 — Evaluación final en Holdout (Pozo 5) y comparación Balanceado vs. Completo**:
-   - En el Pozo 5 (nunca visto en el entrenamiento), **XGBoost obtiene el mejor desempeño tanto en el dataset balanceado ($R^2 = -0.1039$, $\text{RMSE} = 16.00\text{ m/h}$, $\text{MAE} = 13.82\text{ m/h}$) como en el completo ($R^2 = -0.2061$, $\text{RMSE} = 16.73\text{ m/h}$)**.
-   - El **dataset balanceado supera al completo en XGBoost**, confirmando que equilibrar la frecuencia de muestreo a 1 fila por metro evita que los pozos 3 y 4 sobredimensionen el entrenamiento.
-   - Se incluyen gráficos de **Predicho vs. Real**, **Distribución de errores (residuos) de XGBoost** ($\text{ROP}_{\text{real}} - \text{ROP}_{\text{pred}}$, con error medio de $+5.2\text{ m/h}$), **Feature Importance** (Random Forest y XGBoost) y el **Perfil de ROP vs. Profundidad medida** a lo largo de todo el Pozo 5.
+   - El $R^2$ en LOWO compara contra la media del pozo de validación (desconocida antes de perforar), dando promedios negativos ($R^2 = -0.47$ en XGBoost). Sin embargo, comparado contra el **`Baseline (Media)` del entrenamiento** ($\text{MAE} = 15.96\text{ m/h}$, $R^2 = -1.03$), **XGBoost reduce el MAE a $11.73\text{ m/h}$** (y **Random Forest sin MD baja su MAE de $13.72$ a $12.25\text{ m/h}$**).
+   - El desglose por pozo muestra que para XGBoost los folds más adversos son los **pozos 2 y 3 ($R^2 \approx -0.95$)**, mientras que en los **pozos 4 y 6 obtiene $R^2 \approx -0.04\text{ y }+0.02$**, y en los **pozos 0 y 1 ganan los modelos lineales (`Ridge` / `Linear Regression`, $R^2 = +0.13\text{ y }+0.09$)**.
+   - Se demuestra además que estandarizar el target por pozo (Z-score) solo mejoraba el $R^2$ aparente cuando se des-normalizaba con la media y desvío del pozo de validación (*fuga de datos*); usando estadísticas del entrenamiento el $R^2$ cae a $-1.70$.
+4. **Experimento 3 — Evaluación final en Holdout (Pozo 5): efecto de eliminar `Measured Depth m`**:
+   - El Pozo 5 está íntegramente en el tramo de $8.5\text{''}$ ($215.9\text{ mm}$) entre $2.875\text{ y }3.793\text{ m}$ con ROP medio de $32.2\text{ m/h}$.
+   - **Con `Measured Depth m` (8 variables)**: los árboles asimilan el Pozo 5 a los únicos pozos profundos de entrenamiento (Pozos 3 y 4, $\sim 21\text{ m/h}$) y subestiman el ROP, dando $R^2 = -0.1083$ y $\text{MAE} = 13.53\text{ m/h}$, casi empatado con el `Baseline (Media)` ($R^2 = -0.0991$, $\text{MAE} = 14.06\text{ m/h}$).
+   - **Sin `Measured Depth m` (7 variables operativas puras)**: **XGBoost pasa a $R^2 = +0.1181$, $\text{RMSE} = 14.30\text{ m/h}$ y reduce el MAE a $11.76\text{ m/h}$** en el dataset balanceado (y **Random Forest alcanza $R^2 = +0.1046$ y $\text{MAE} = 11.76\text{ m/h}$** en el dataset completo).
+   - Se incluyen gráficos de **Predicho vs. Real**, **Distribución de errores (residuos) de XGBoost**, **Feature Importance** de las 7 variables operativas y el **Perfil de ROP vs. Profundidad medida** en el Pozo 5.
+5. **Experimento 4 — Contraste con Persistencia y prueba de calibración inicial en Pozo 5**:
+   - **Baseline de persistencia ($\widehat{\text{ROP}}_t = \text{ROP}_{t-1}$)**: predecir con el ROP del metro anterior en el Pozo 5 alcanza **$R^2 = 0.6708$ y $\text{MAE} = 4.42\text{ m/h}$**, superando a los modelos estáticos que no usan historia reciente.
+   - **Calibración con los primeros metros (30, 60 y 100 m)**: corregir el sesgo inicial arroja resultados inestables ($\text{MAE}$ en el resto del pozo de $19.14$, $10.79$ y $11.55\text{ m/h}$ respectivamente), evidenciando que un ajuste constante al inicio del tramo no compensa la falta de variables litológicas (`Gamma Ray`).
 
 #### Conclusiones principales del modelado
 
-- **Memorizar no es generalizar**: El contraste entre el split 80/20 ($R^2 = 0.89$) y el LOWO ($R^2 = -0.19$) demuestra que particionar filas consecutivas al azar sobreestima el rendimiento por interpolación; la validación por pozo completo (LOWO) es la métrica honesta para evaluar transferencia a un pozo nuevo.
-- **Implicación práctica en operación**: Los modelos basados en árboles (especialmente **XGBoost**) son aptos para **optimización en tiempo real dentro de pozos o formaciones conocidas**, mientras que para un pozo nuevo requieren una etapa de **calibración inicial con los primeros metros perforados** para ajustar el nivel base de ROP de la formación.
+- **El *depth confounding* perjudica la transferencia entre pozos**: Quitar `Measured Depth m` y `pozo` obliga a los modelos de árboles a apoyarse en la mecánica de perforación (WOB, RPM, torque, caudal, presión) y permite superar al baseline en el Pozo 5 ($R^2 = +0.12$, $\text{MAE} = 11.76\text{ m/h}$).
+- **Límite físico por ausencia de litología (`Gamma Ray`) y memoria temporal**: Aunque los 6 pozos tienen rangos operativos comparables tras la limpieza (Notebook 2), el ROP depende fuertemente de la formación atravesada. Para superar al baseline de persistencia en tiempo real o generalizar con mayor precisión a pozos nuevos es indispensable incorporar registros de litología (`Gamma Ray`) o variables autorregresivas del ROP reciente.
 
 ---
 
