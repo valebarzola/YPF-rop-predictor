@@ -1,6 +1,6 @@
 # YPF-rop-predictor
 
-Predicción de **ROP (Rate of Penetration / velocidad de penetración)** en pozos de perforación petrolera, usando el dataset público de la Universidad de Stavanger (bloque 15/9, Mar del Norte - Noruega).
+Predicción de **ROP (Rate of Penetration / velocidad de penetración)** y descubrimiento de regímenes operativos en pozos de perforación petrolera, usando el dataset público de la Universidad de Stavanger (bloque 15/9, Mar del Norte - Noruega).
 
 ## Integrantes
 
@@ -11,10 +11,10 @@ Predicción de **ROP (Rate of Penetration / velocidad de penetración)** en pozo
 
 ## ¿Qué es el ROP y por qué importa?
 
-**ROP (Rate of Penetration)** es la velocidad a la que el trépano avanza perforando la roca, medida en metros por hora (m/h). Es una de las variables más importantes de la operación de perforación porque **el tiempo de taladro es el mayor costo de perforar un pozo**: cada hora de equipo operando cuesta dinero real, avance rápido o lento. Poder predecir el ROP a partir de los parámetros de perforación (peso sobre la mecha, rotación, torque, presión de bombeo, etc.) permite:
+**ROP (Rate of Penetration)** es la velocidad a la que el trépano avanza perforando la roca, medida en metros por hora (m/h). Es una de las variables más importantes de la operación de perforación porque **el tiempo de taladro es el mayor costo de perforar un pozo**: cada hora de equipo operando cuesta dinero real, avance rápido o lento. Poder predecir el ROP y caracterizar los regímenes operativos a partir de los parámetros de perforación (peso sobre la mecha, rotación, torque, presión de bombeo, etc.) permite:
 
 - Planificar cuánto va a tardar un pozo nuevo antes de perforarlo.
-- Detectar en tiempo real si algo anda mal durante la operación.
+- Detectar en tiempo real si algo anda mal o si ocurre una maniobra atípica durante la operación.
 - Ajustar los parámetros de perforación para maximizar la velocidad sin dañar el equipo ni la formación.
 
 ## El dataset
@@ -34,7 +34,7 @@ En resumen: **6 pozos para entrenar (0, 1 propio, 2, 3, 4, 6) y 1 pozo reservado
 
 ---
 
-## Contenido de este repositorio (Pipeline en 3 etapas)
+## Contenido de este repositorio (Pipeline en 5 etapas)
 
 ### Etapa 1 — `ROP_Noruega_Pozo1_Crudo.ipynb`
 
@@ -118,10 +118,52 @@ Notebook de **modelado supervisado, validación intra-pozo por bloques de 100 m,
    - **Baseline de persistencia ($\widehat{\text{ROP}}_t = \text{ROP}_{t-1}$)**: predecir con el ROP del metro anterior en el Pozo 5 alcanza **$R^2 = 0.6708$ ($\text{RMSE} = 8.73\text{ m/h}$ y $\text{MAE} = 4.42\text{ m/h}$)**, superando a los modelos estáticos que no usan historia reciente.
    - **Calibración con los primeros metros (30, 60 y 100 m)**: corregir el sesgo inicial arroja resultados inestables ($\text{MAE}$ en el resto del pozo de $19.14$, $10.79$ y $11.55\text{ m/h}$ respectivamente), evidenciando que un ajuste constante al inicio del tramo no compensa la falta de variables litológicas (`Gamma Ray`).
 
-#### Conclusiones principales del modelado
+---
 
-- **El *depth confounding* perjudica la transferencia entre pozos y el ajuste de hiperparámetros por pozo reduce el sobreajuste**: Quitar `Measured Depth m` y `pozo` obliga a los modelos de árboles a apoyarse en la mecánica de perforación (WOB, RPM, torque, caudal, presión), permite superar al baseline en el Pozo 5 ($R^2 = +0.1181$, $\text{MAE} = 11.76\text{ m/h}$) y, junto con `GridSearchCV` validado por pozo (`max_depth=4`), reduce el MAE en LOWO a $11.19\text{–}11.34\text{ m/h}$.
-- **Límite físico por ausencia de litología (`Gamma Ray`) y memoria temporal**: Aunque los 6 pozos tienen rangos operativos comparables tras la limpieza (Notebook 2), el ROP depende fuertemente de la formación atravesada. Para superar al baseline de persistencia en tiempo real o generalizar con mayor precisión a pozos nuevos es indispensable incorporar registros de litología (`Gamma Ray`) o variables autorregresivas del ROP reciente.
+### Etapa 4 — `ROP_Noruega_No_Supervisado.ipynb`
+
+Notebook de **aprendizaje no supervisado (`SVD`, `PCA`, `K-Means` y `DBSCAN`)** sobre `conjunto_limpio_balanceado.csv` y proyección del `Pozo 5`, entrenando únicamente con las **7 variables operativas de perforación** (reservando `ROP`, `Measured Depth m` y `pozo` como variables externas para interpretar y validar los resultados).
+
+#### Proceso y hallazgos principales
+
+1. **Importancia del escalado (`StandardScaler`)**:
+   - Se demuestra que sin escalar, `Average Standpipe Pressure kPa` (en miles de kPa) domina por completo las distancias euclidianas y hace que K-Means corte únicamente por presión de bombeo. Al estandarizar (`StandardScaler`), las 7 variables aportan equilibradamente.
+2. **Descomposición en Valores Singulares (SVD) y Análisis de Componentes Principales (PCA)**:
+   - Se comprueba numéricamente la equivalencia entre la proyección SVD truncada ($Z_r = U_r \Sigma_r$) y PCA ($\text{diferencia máxima} = 7.33 \times 10^{-14}$), cuantificando el error de reconstrucción de Frobenius ($\|X - B_r\|_F$) desde $r=1$ hasta $r=7$.
+   - Los dos primeros componentes retienen el **$67.72\%$ de la varianza total** (`PC1 = 41.85%`, `PC2 = 25.87%`, y con `PC3` el $82.35\%$).
+   - **`PC1`** opone geometría/hidráulica (`Diameter mm` $+0.532$ y `Mud Flow In` $+0.529$) contra carga mecánica en el trépano (`Torque` $-0.422$, `WOB` $-0.415$, `RPM` $-0.238$).
+   - **`PC2`** representa el esfuerzo de suspensión y bombeo (`Hookload` $+0.662$ y `Standpipe Pressure` $+0.614$).
+3. **Segmentación de regímenes operativos con K-Means ($k = 4$, $\text{Silhouette} = 0.4091$) y perfil de Silhouette por punto**:
+   - El análisis de `silhouette_samples` verifica la cohesión interna de cada grupo (con apenas $0.00\%$ a $0.37\%$ de observaciones con silueta negativa).
+   - Sin ver la profundidad, el pozo ni el ROP, K-Means descubre **4 regímenes reales de perforación** fuertemente alineados con las secciones constructivas del pozo ($\text{Adjusted Rand Index} = 0.4060$ frente al tramo de diámetro):
+     - **Cluster 1 — *Superficial ($17.5\text{''}/12.25\text{''}$) de bajo esfuerzo y alto ROP* ($1.969\text{ filas}, 23.2\%$):** agrupa el 100% de los **Pozos 0, 1 y 6** ($\text{MD media} = 793.7\text{ m}$) y duplica el avance del resto del yacimiento (**$\text{ROP medio} = 41.8\text{ m/h}$**).
+     - **Cluster 0 — *Intermedio de alto bombeo y bajo WOB* ($3.175\text{ filas}, 37.5\%$):** tramos medios de los Pozos 2, 3 y 4 ($\text{MD media} = 1.971.1\text{ m}$, **$\text{ROP medio} = 24.0\text{ m/h}$**).
+     - **Cluster 3 — *Profundo ($8.5\text{''}$) estándar de alto torque* ($2.437\text{ filas}, 28.8\%$):** tramos profundos de los Pozos 2, 3 y 4 ($\text{MD media} = 3.363.2\text{ m}$, **$\text{ROP medio} = 21.6\text{ m/h}$**).
+     - **Cluster 2 — *Profundo ($8.5\text{''}$) de alta energía mecánica (alto WOB y RPM)* ($892\text{ filas}, 10.5\%$):** exclusivo del Pozo 4 en entrenamiento ($\text{MD media} = 3.081.6\text{ m}$, **$\text{ROP medio} = 23.6\text{ m/h}$**).
+   - **Proyección del Pozo 5 (Holdout):** el 100% de las 908 filas del Pozo 5 cae en los regímenes profundos **C3 ($553\text{ filas}$) y C2 ($355\text{ filas}$)**, pero con un ROP real más alto ($35.3\text{ y }27.3\text{ m/h}$) por mayor perforabilidad de la roca.
+4. **Clustering por densidad con DBSCAN y detección de maniobras atípicas (`-1`)**:
+   - Usando el gráfico de distancias al 10.° vecino (`NearestNeighbors`), con `eps = 0.7` y `min_samples = 10` se clasifican $8.293$ puntos *Core*, $108$ *Border* y **$72$ puntos *Noise* (`-1`, $0.85\%$)**.
+   - Los puntos de ruido corresponden a transiciones operativas con baja rotación ($\text{RPM media} = 85.9$ vs. $156.0$) y baja presión donde la dispersión del ROP casi se duplica ($\text{std} = 24.8\text{ m/h}$ vs. $14.4\text{ m/h}$).
+
+---
+
+### Etapa 5 — `ROP_Noruega_Redes_Neuronales.ipynb`
+
+Notebook dedicada al **diseño, regularización, optimización y monitoreo en producción de Redes Neuronales (`MLPRegressor`)** sobre los pozos de Noruega y el **Pozo 5 (Holdout)**.
+
+#### Proceso y hallazgos principales
+
+1. **Efecto del escalado en el descenso por gradiente**:
+   - Sin escalar las variables de entrada, la diferencia de órdenes de magnitud entre `Standpipe Pressure kPa` y `WOB kkgf` estanca el entrenamiento ($\text{RMSE Train} = 11.64\text{ m/h}$). Con `StandardScaler` dentro de un `Pipeline`, el error de entrenamiento baja a $6.37\text{ m/h}$ sin fuga de datos entre pozos.
+2. **Funciones de activación (`relu`, `tanh`, `logistic`)**:
+   - Si bien `relu` y `tanh` convergen más rápido en entrenamiento que `logistic`, al extrapolar a pozos nuevos (**LOWO** y **Pozo 5**) las funciones de activación acotadas (`tanh` y `logistic`) evitan las extrapolaciones lineales descontroladas de `relu` ante desplazamientos en los sensores.
+3. **Arquitectura de la red y brecha de sobreajuste (*overfitting*)**:
+   - Al incrementar el tamaño de la red desde `(8,)` ($73\text{ parámetros}$) hasta `(128, 64, 32)` ($11.393\text{ parámetros}$), el `RMSE Train` baja de $9.26$ a $5.61\text{ m/h}$, pero el `RMSE LOWO` empeora de $18.52$ a $23.27\text{ m/h}$ (la brecha de sobreajuste casi se duplica de $9.26$ a $17.66\text{ m/h}$).
+4. **Regularización $L_2$ (`alpha`), `early_stopping` y `GridSearchCV` por pozo**:
+   - Combinando penalización $L_2$ alta (`alpha = 5.0`), parada temprana (`early_stopping=True`), arquitectura moderada `(64, 32)` y activación `tanh`, `GridSearchCV` reduce el error en **LOWO a $\text{RMSE} = 17.63\text{ m/h}$ y $\text{MAE} = 14.18\text{ m/h}$**, y en el **Pozo 5 (Holdout) a $\text{RMSE} = 16.46\text{ m/h}$ y $\text{MAE} = 14.38\text{ m/h}$** (frente a $\text{MAE} = 18.23\text{ m/h}$ de la red profunda sin regularizar).
+5. **Monitoreo por lotes en producción (`Kolmogorov-Smirnov` y `PSI`) y adaptación con `partial_fit` en el Pozo 5**:
+   - Al simular la perforación del Pozo 5 en **4 lotes sucesivos de profundidad**, tanto el test **K-S** ($p < 10^{-50}$) como el **Population Stability Index (`PSI` $> 0.20$)** detectan *Data Drift* en las variables operativas, acompañado de *Concept Drift* en los tramos profundos.
+   - Evaluando sobre los lotes prospectivos del Pozo 5 (`Lotes 1 a 3`), la actualización incremental lote a lote con **`partial_fit` (`v3`) reduce el error a $\text{MAE} = 11.33\text{ m/h}$ y $\text{RMSE} = 13.72\text{ m/h}$**, superando tanto a la red estática original (`v1`, $\text{MAE} = 14.88\text{ m/h}$) como al reentrenamiento con el tramo inicial (`v2`, $\text{MAE} = 13.55\text{ m/h}$).
 
 ---
 
@@ -148,10 +190,12 @@ pip install -r requirements_rop.txt
 ## Cómo correr el proyecto
 
 1. Clonar el repositorio o abrir los notebooks en [Google Colab](https://colab.research.google.com/) / VS Code.
-2. Seguir el orden de los 3 notebooks:
+2. Seguir el orden de los 5 notebooks:
    - `ROP_Noruega_Pozo1_Crudo.ipynb` → limpieza desde cero del Pozo 1 crudo (`well1_crudo.csv`).
    - `ROP_Noruega_Resto_Pozos_Entrenamiento_Sin_Relleno.ipynb` → limpieza sin relleno de los 7 pozos y generación de `conjunto_limpio.csv`, `conjunto_limpio_balanceado.csv` y `USROP_A 5 sin relleno.csv`.
-   - `ROP_Noruega_Modelado.ipynb` → entrenamiento, validación LOWO, optimización de hiperparámetros con `GridSearchCV`, evaluación en holdout (Pozo 5) y comparación de modelos.
+   - `ROP_Noruega_Modelado.ipynb` → entrenamiento supervisado, validación LOWO, optimización con `GridSearchCV`, evaluación en holdout (Pozo 5) y comparación de modelos.
+   - `ROP_Noruega_No_Supervisado.ipynb` → descomposición `SVD`, reducción de dimensionalidad (`PCA`), segmentación de regímenes operativos (`K-Means` + `Silhouette`) y detección de anomalías (`DBSCAN`).
+   - `ROP_Noruega_Redes_Neuronales.ipynb` → análisis profundo de redes neuronales (`MLPRegressor`), regularización, puesta en producción, monitoreo de *Data/Concept Drift* (`K-S` y `PSI`) y aprendizaje incremental (`partial_fit`) en el Pozo 5.
 
 ## Fuente de los datos
 
