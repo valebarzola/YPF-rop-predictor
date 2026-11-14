@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>YPF ROP Predictor API - Swagger UI</title>
+<style>
+  body { background:#fafafa; color:#3b4151; font-family:sans-serif; margin:0; padding:0; }
+  .topbar { background:#1b1b1b; color:#fff; padding:14px 28px; display:flex; justify-content:space-between; align-items:center; }
+  .wrap { max-width:1100px; margin:28px auto; padding:0 20px; }
+  .badge-v { background:#89bf04; color:#fff; padding:3px 8px; border-radius:12px; font-size:12px; font-weight:700; }
+  .op { border:1px solid #49cc90; background:rgba(73,204,144,.1); border-radius:6px; margin-bottom:14px; padding:14px 18px; }
+  .op.get { border-color:#61affe; background:rgba(97,175,254,.1); }
+  .method { display:inline-block; padding:5px 14px; border-radius:4px; color:#fff; font-weight:700; font-size:13px; margin-right:12px; background:#49cc90; }
+  .op.get .method { background:#61affe; }
+  .path { font-family:monospace; font-size:16px; font-weight:700; }
+  pre { background:#272822; color:#f8f8f2; padding:12px; border-radius:6px; overflow-x:auto; font-size:12.5px; }
+  a.back { color:#38bdf8; text-decoration:none; font-weight:700; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div><b>FastAPI Swagger UI</b> — YPF ROP Predictor API <span class="badge-v">v1.1.0 (OAS 3.1)</span></div>
+  <a class="back" href="index.html">← Volver a la App en Vivo</a>
+</div>
+<div class="wrap">
+  <h1>YPF ROP Predictor — Servicio de Inferencia y Monitoreo de Drift (Pozos Noruega)</h1>
+  <p>Documentación interactiva de los endpoints de <code>produccion/main.py</code> (FastAPI + <code>modelo_rop_pipeline.joblib</code>).</p>
+
+  <div class="op get">
+    <span class="method">GET</span><span class="path">/salud</span> — Verifica la salud del pipeline y devuelve las medias y desvíos congelados del StandardScaler
+    <pre>{
+  "estado": "OPERATIVO",
+  "version_modelo": "1.0.0",
+  "modelos_empaquetados": ["pipeline_xgb", "pipeline_rf", "pipeline_mlp", "pipeline_kmeans"],
+  "features_operativas": [
+    "Weight on Bit kkgf", "Average Standpipe Pressure kPa", "Average Surface Torque kN.m",
+    "Average Rotary Speed rpm", "Mud Flow In L/min", "Diameter mm", "Average Hookload kkgf"
+  ]
+}</pre>
+  </div>
+
+  <div class="op">
+    <span class="method">POST</span><span class="path">/predecir</span> — Caso 1: Predicción individual en tiempo real (JSON de 1 metro perforado)
+    <pre>{
+  "measured_depth_m": 3120,
+  "rop_predicha_principal_m_h": 23.72,
+  "rop_predicha_rf_m_h": 23.68,
+  "rop_predicha_mlp_m_h": 27.63,
+  "regimen_operativo_kmeans": "C3: Profundo (8.5'') estándar de alto torque",
+  "alerta_operativa": "OK: Parámetros dentro del rango operativo de entrenamiento"
+}</pre>
+  </div>
+
+  <div class="op">
+    <span class="method">POST</span><span class="path">/predecir_lote</span> — Caso 2: Predicción por lote (Batch) sobre una tabla de mediciones
+  </div>
+
+  <div class="op">
+    <span class="method">POST</span><span class="path">/monitorear_drift</span> — Auditoría de Data Drift (Kolmogorov-Smirnov y PSI) y Concept Drift (MAE, RMSE, R²)
+  </div>
+</div>
+</body>
+</html>

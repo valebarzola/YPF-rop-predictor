@@ -147,7 +147,7 @@ def pagina_inicio():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>YPF ROP Predictor — Servicio Web en Producción (FastAPI + MLOps)</title>
+<title>YPF ROP Predictor — Predicción y Monitoreo en Tiempo Real</title>
 <style>
   :root {
     --bg:#0b1120; --card:#111827; --border:#1f2937;
@@ -216,7 +216,7 @@ def pagina_inicio():
 <div class="container">
   <div class="header">
     <div>
-      <span class="badge">● PIPELINE EN PRODUCCIÓN ACTIVO (FASTAPI + DOCKER)</span>
+      <span class="badge">● PIPELINE EN PRODUCCIÓN ACTIVO</span>
       <h1 style="margin-top:6px;font-size:24px;">Predicción de ROP y Monitoreo Dinámico en Tiempo Real — Pozos Noruega</h1>
       <p style="color:var(--muted);font-size:13.5px;">Mové cualquier sensor o elegí un escenario: los gráficos y el JSON se actualizan en vivo consultando el Pipeline empaquetado (<code>modelo_rop_pipeline.joblib</code>)</p>
     </div>
